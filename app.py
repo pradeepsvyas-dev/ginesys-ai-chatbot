@@ -1,34 +1,78 @@
 import streamlit as st
+import pandas as pd
+import numpy as np
 import openai
 import json
-import pandas as pd
-import random
-
-# Load OpenAI key from Streamlit secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-
-st.set_page_config(page_title="Ginesys AI Assistant", layout="wide")
-st.title("🤖 Ginesys AI Data Assistant")
+import plotly.express as px
+from datetime import datetime, timedelta
 
 # -----------------------------
-# STEP 1: Convert User Prompt to Structured JSON
+# CONFIG
+# -----------------------------
+st.set_page_config(page_title="Ginesys AI Assistant", layout="wide")
+st.title("🤖 Ginesys AI Data Assistant (Demo Version)")
+
+openai.api_key = st.secrets["OPENAI_API_KEY"]
+
+# -----------------------------
+# STEP 1: CREATE SAMPLE DATA
+# -----------------------------
+
+@st.cache_data
+def generate_sample_data():
+
+    np.random.seed(42)
+
+    stores = ["Mumbai", "Delhi", "Bangalore", "Hyderabad"]
+    categories = ["Men", "Women", "Kids", "Accessories"]
+
+    dates = pd.date_range(
+        start=datetime.today() - timedelta(days=60),
+        end=datetime.today()
+    )
+
+    data = []
+
+    for date in dates:
+        for store in stores:
+            for category in categories:
+                sales = np.random.randint(10000, 50000)
+                transactions = np.random.randint(50, 200)
+
+                data.append({
+                    "date": date,
+                    "store": store,
+                    "category": category,
+                    "sales": sales,
+                    "transactions": transactions
+                })
+
+    df = pd.DataFrame(data)
+    return df
+
+
+df = generate_sample_data()
+
+# -----------------------------
+# STEP 2: INTENT EXTRACTION
 # -----------------------------
 
 def extract_intent(user_input):
+
     prompt = f"""
-You are an AI assistant for Ginesys ERP system.
+You are an AI assistant for Ginesys retail ERP.
 
-Convert the user request into structured JSON format:
+Convert user request into JSON:
 
-Example output:
+Example:
 {{
-  "intent": "",
+  "intent": "sales_report / category_analysis / store_comparison",
   "store": "",
-  "date_range": "",
-  "metric": ""
+  "category": "",
+  "date_range_days": number
 }}
 
-User request: {user_input}
+User: {user_input}
 
 Only return JSON.
 """
@@ -41,37 +85,53 @@ Only return JSON.
 
     return response.choices[0].message["content"]
 
-
 # -----------------------------
-# STEP 2: Mock Ginesys Data API
+# STEP 3: PROCESS DATA
 # -----------------------------
 
-def fetch_mock_data(structured_json):
-    data = json.loads(structured_json)
+def process_query(structured_json):
 
-    # Simulated sales data
-    if data["intent"] == "sales_report":
-        total_sales = random.randint(100000, 500000)
-        previous_sales = random.randint(100000, 500000)
+    query = json.loads(structured_json)
 
-        return {
-            "store": data["store"],
-            "current_sales": total_sales,
-            "previous_sales": previous_sales
+    days = query.get("date_range_days", 7)
+    cutoff = datetime.today() - timedelta(days=int(days))
+
+    filtered = df[df["date"] >= cutoff]
+
+    if query["intent"] == "sales_report":
+
+        if query["store"]:
+            filtered = filtered[filtered["store"] == query["store"]]
+
+        total_sales = filtered["sales"].sum()
+
+        return filtered, {
+            "total_sales": int(total_sales),
+            "transactions": int(filtered["transactions"].sum())
         }
 
-    return {"message": "No data found"}
+    elif query["intent"] == "category_analysis":
 
+        summary = filtered.groupby("category")["sales"].sum().reset_index()
+        return summary, summary.to_dict()
+
+    elif query["intent"] == "store_comparison":
+
+        summary = filtered.groupby("store")["sales"].sum().reset_index()
+        return summary, summary.to_dict()
+
+    return None, {"message": "Intent not recognized"}
 
 # -----------------------------
-# STEP 3: Ask AI to Analyze Data
+# STEP 4: AI INSIGHTS
 # -----------------------------
 
-def analyze_data(data):
+def generate_insights(data_summary):
+
     prompt = f"""
-Analyze this Ginesys data and give business insights:
+Analyze this retail data and provide business insights:
 
-{data}
+{data_summary}
 """
 
     response = openai.ChatCompletion.create(
@@ -82,28 +142,36 @@ Analyze this Ginesys data and give business insights:
 
     return response.choices[0].message["content"]
 
-
 # -----------------------------
-# MAIN CHAT FLOW
+# MAIN CHAT UI
 # -----------------------------
 
-user_input = st.text_input("Ask something about your business:")
+user_input = st.text_input("Ask about your business (e.g., Show last 7 days sales for Mumbai)")
 
 if user_input:
 
-    with st.spinner("Thinking..."):
+    with st.spinner("Analyzing..."):
 
         structured = extract_intent(user_input)
-
         st.subheader("🔎 Extracted Intent")
         st.code(structured, language="json")
 
-        data = fetch_mock_data(structured)
+        data, summary = process_query(structured)
 
-        st.subheader("📊 Data")
-        st.write(data)
+        st.subheader("📊 Data Summary")
+        st.write(summary)
 
-        insights = analyze_data(data)
+        # Charts
+        if isinstance(data, pd.DataFrame):
+            if "category" in data.columns:
+                fig = px.bar(data, x="category", y="sales", title="Category Sales")
+                st.plotly_chart(fig)
+
+            elif "store" in data.columns:
+                fig = px.bar(data, x="store", y="sales", title="Store Comparison")
+                st.plotly_chart(fig)
+
+        insights = generate_insights(summary)
 
         st.subheader("📈 AI Insights")
         st.write(insights)
