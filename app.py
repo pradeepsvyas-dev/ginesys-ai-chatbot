@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import openai
+from openai import OpenAI
 import json
 import plotly.express as px
 from datetime import datetime, timedelta
@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Ginesys AI Assistant", layout="wide")
 st.title("🤖 Ginesys AI Data Assistant (Demo Version)")
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # -----------------------------
 # STEP 1: CREATE SAMPLE DATA
@@ -77,11 +77,11 @@ User: {user_input}
 Only return JSON.
 """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0
-    )
+response = openai.ChatCompletion.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0
+)
 
     return response.choices[0].message["content"]
 
@@ -134,11 +134,11 @@ Analyze this retail data and provide business insights:
 {data_summary}
 """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3
-    )
+response = openai.ChatCompletion.create(
+    model="gpt-4o-mini",
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0
+)
 
     return response.choices[0].message["content"]
 
