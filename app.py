@@ -77,7 +77,7 @@ User: {user_input}
 Only return JSON.
 """
 
-response = openai.ChatCompletion.create(
+response = client.chat.completions.create(
     model="gpt-4o-mini",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
@@ -134,7 +134,7 @@ Analyze this retail data and provide business insights:
 {data_summary}
 """
 
-response = openai.ChatCompletion.create(
+response = client.chat.completions.create(
     model="gpt-4o-mini",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
